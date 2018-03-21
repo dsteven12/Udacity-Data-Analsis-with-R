@@ -1,0 +1,769 @@
+---
+title: "Exploring Prosper Loan Data by Darryl Lardizabal"
+output: html_document
+---
+#Introduction
+
+Prosper, a peer-to-peer lending company, kept a dataset that contained 113,937 loans with 81 variables per loan. The database can be downloaded from this url: https://s3.amazonaws.com/udacity-hosted-downloads/ud651/prosperLoanData.csv  
+
+I chose this dataset to help increase my own personal financial literacy and health. Mortgages can make or break someone's adult life; and either leave them happy and care free or crippled under debt. Through this exploration I hope to get a better understanding of what variables seem to influence the interest rate and the loan amount.
+
+Since there's no variable for loan amount approved, I'll mainly focus on variables that influence borrower rates. 
+
+```{r}
+#Load Dataset
+loanData <- read.csv('C:/Users/Admin/Downloads/prosperLoanData.csv')
+names(loanData)
+# data source:
+# https://s3.amazonaws.com/udacity-hosted-downloads/ud651/prosperLoanData.csv&sa=D&ust=1518297616552000&usg=AFQjCNHryWNnloE0Nd9Au1hj2OJqOrKolg
+```
+
+
+```{r}
+str(loanData)  
+```
+
+```{r}
+library(dplyr)
+# Finds the number of NAs for each column. 
+colSums(is.na(loanData))
+```
+
+Through the use of the is.na function, we can determine the number of NAs in each variable. This helps me filter our variables with too many NA's. 
+
+
+#Univariate Plots
+
+```{r}
+library(ggplot2)
+ggplot(aes(x = loanData$StatedMonthlyIncome), data = loanData) + 
+  xlab('Stated Monthly Income') + 
+  ylab('Number of Borrowers') +
+  geom_histogram() + 
+  scale_x_continuous(limits = c(0, 12266))
+  
+        
+summary(loanData$StatedMonthlyIncome)
+loanData <- subset(loanData, StatedMonthlyIncome <= 100000)
+```
+
+Through the summary function on the variable: Stated Monthly Income; we learned that the median income is $4667 with an IQR of $3625. That means that outliers would be found above $12,265.5 and below $2,237.5. I've confingured the plot to only show stated monthly income's between $0 and $12,266. You can see that the data is skewed right with more borrowers between the 1st quartile $3,200 and the 3rd quartile $6816. 
+
+```{r}
+loanData$EmploymentStatus <- ordered(loanData$EmploymentStatus, 
+                                     levels=c("Employed", 
+                                              "Full-time", 
+                                              "Part-time", 
+                                              "Self-employed", 
+                                              "Retired", 
+                                              "Not employed", 
+                                              "Not available", 
+                                              "Other", 
+                                              ""))
+
+ggplot(data = loanData, aes(x=loanData$EmploymentStatus)) +
+  geom_bar() + 
+  xlab("Employment Status") +
+  ylab("Number of Borrowers")
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+summary(loanData$EmploymentStatus)
+```
+
+
+It's hard to say what Employed means in this case. Looking at Full-Time, Part-time, and Self-Employed, which are typical employment situations; the numbers don't seem to add up to the number of borrowers employed. 
+
+
+```{r}
+ggplot(aes(x=EmploymentStatusDuration), data=loanData) +
+  geom_histogram(bins=100) +
+  xlab("Employment Status Duration in Months") +
+  ylab('Number of Borrowers') +
+  ggtitle("Employment Status Duration Histogram") +
+  scale_x_continuous(limits = c(0, 303.5))
+  
+summary(loanData$EmploymentStatusDuration)
+```
+
+Here, we go a bit deeper into Employment looking specifically at status of how long someone has been employed in months. Running the summary function on employment status duration reveals that the median length of employment in 67 months. The max of 755 is skewing the data right and possibly conflicting the graph. Finding out outliers are above 303.5, I've limited the x-axis to better visualize the data. Is the employment status, Employed, a situational matter having to do with a certain length of months employed? This may need further scrutiny. 
+
+```{r}
+p1 <- ggplot(aes(loanData$LoanOriginalAmount), data = loanData) +
+  geom_histogram() +
+  xlab('Original Loan Amount') +
+  ylab('Number of Borrowers')
+
+#Created breaks to determine possible location of spikes
+p2 <- p1 +
+  scale_x_continuous(breaks = seq(0, 40000, 3500))
+
+
+library(gridExtra)
+grid.arrange(p1, p2, ncol = 1)
+
+summary(loanData$LoanOriginalAmount)
+```
+
+It's interesting to note that there are several spikes on certain locations of the data. I changed the X-axis to better determine why that might be. At first, I believed they may be at $5000 intervals, it seems the first 3 spikes are at $3500, $7000, and $10,500. I'm not sure why this may be, this needs further scrutiny. Also, it seems at least 75% of the loans are under $12,000. 
+
+```{r}
+loanData$CreditGrade <- ordered(loanData$CreditGrade, 
+                                levels=c('AA', 
+                                         'A', 
+                                         'B', 
+                                         'C', 
+                                         'D', 
+                                         'E', 
+                                         'HR', 
+                                         'NC', 
+                                         ''))
+
+qplot(loanData$CreditGrade) +
+  xlab("Credit Grade")
+summary(loanData$CreditGrade)
+```
+
+Several thousand loans, don't have a credit grade assigned. 
+
+```{r}
+# Plot histogram for CreditScoreRangeLower with 100 bins
+p1 <-
+  ggplot(aes(x=CreditScoreRangeLower), data=loanData) +
+    geom_histogram(bins=100) +
+    xlab('Credit Score Lower') +
+    ggtitle("Credit Score Range Lower Histogram")
+
+# Plot histogram for CreditScoreRangeUpper with 100 bins
+p2 <-
+  ggplot(aes(x=CreditScoreRangeUpper), data=loanData) +
+    geom_histogram(bins=100) +
+    xlab('Credit Score Upper') +
+    ggtitle("Credit Score Range Upper Histogram")
+
+#Created a new variable
+loanData$CreditScoreAverage <- (loanData$CreditScoreRangeLower +
+                                  loanData$CreditScoreRangeUpper) / 2
+
+p3 <-  
+  ggplot(aes(x=loanData$CreditScoreAverage), data=loanData) +
+    geom_histogram(bins=100) + 
+    xlab('Credit Score Average') +
+    ggtitle("Credit Score Average Histogram")
+
+grid.arrange(p1, p2, p3, ncol = 1)
+summary(loanData$CreditScoreAverage)
+```
+
+All three histograms look fairly similar. The first two hisograms represent the lower and upper range of credit scores, while the third represents the average between the lower and upper range. Most average credit scores seem to be in between 600 and 800. 
+
+```{r}
+ggplot(aes(x = loanData$BorrowerRate), data = loanData) +
+  geom_histogram() +
+  xlab('Borrowing Rate')
+
+loanData %>%
+  group_by(BorrowerRate) %>%
+  summarise(Count=n()) %>%
+  arrange(desc(Count))
+
+summary(loanData$BorrowerRate)
+```
+
+The graph is almost right skewed (if it didn't have the peak around .36). The interest rates don't show units though, and most likely the interest rates aren't between 5% to 35%, so we'd have to assume they are between 0.5% to 3.5%. 
+
+```{r}
+loanData$BorrowerRate.bucket <- cut(loanData$BorrowerRate, breaks = 8)
+table(loanData$BorrowerRate.bucket)
+```
+
+Here cutting the variable, turns the rates into categorical variables and then can determine the counts of the rates between each category. Although the highest count borrower rate is .3177, regardless of the differing level of breaks, there are other rates, which more counts seem to fall under. 
+
+```{r}
+loanData$LoanStatusGeneral <- loanData$LoanStatus
+
+levels(loanData$LoanStatusGeneral) <- c(levels(loanData$LoanStatusGeneral), 
+                                        'PastDue')
+
+past_due_rows <- grep('^Past', loanData$LoanStatusGeneral)
+
+loanData$LoanStatusGeneral[past_due_rows] <- 'PastDue'
+
+loanData$LoanStatusGeneral <- ordered(loanData$LoanStatusGeneral, 
+                                      levels=c("Completed", 
+                                               "FinalPaymentInProgress", 
+                                               "Current", 
+                                               "PastDue", 
+                                               "Defaulted", 
+                                               "Chargedoff", 
+                                               "Cancelled"))
+
+ggplot(loanData,
+       aes(x=LoanStatusGeneral)) + 
+  geom_bar() +
+  xlab('Loan Status General') + 
+  ylab('Number of Borrowers') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+summary(loanData$LoanStatusGeneral)
+```
+
+Most loans to seem to be current or completed. Charged off is also notable here. It's curious that 5 loans have been canceled. 
+
+```{r}
+# Plot histogram for Monthly Loan Payment
+ggplot(aes(x=MonthlyLoanPayment), data=loanData) +
+  geom_histogram(bins=100) +
+  xlab("Monthly Loan Payment") + 
+  scale_x_continuous(limits = c(0, 750)) +
+  ggtitle("Monthly Loan Payment Histogram")
+
+summary(loanData$MonthlyLoanPayment)
+```
+
+After accounting for outliers, most of the monthly loan payments seem to be lower than approximately $371.6.
+
+#Univariate Analysis
+
+###Dataset Structure
+
+
+The original dataset contained 113,937 observations of 81 variables. Some of these variables include:
+
+    loan amount - most are under $12,000,
+    credit grade of the loan (mostly missing),
+    loan status (mainly completed, current, or defaulted),
+    employment status (high number of employed numbers, but unable to gather how the number was reached),
+    employment status duration (median 67 months),
+    borrower credit score (mainly between 600 and 800),
+    borrower interest rate (mainly .3177, but categorically a higher number are between 0.124 - 0.187), and
+    monthly loan payments are lower than $371.6
+
+###Main Features of Interest
+
+I'm curious of the correlation between income related variables, loan status, and credit score. 
+
+###Other Potentially Interesting Features
+
+Everyone is different (interest rates, monthly income, monthly loan payments, employment status, occupation, and credit score). Depending on how these stack up, these variables can affect loan repayment and credit score. For example, people with lower monthly incomes are possibly correlated to low or no credit. 
+
+###New Variables Created
+
+I created two new variables:
+
+    BorrowerRate.bucket(using the cut function to turn borrower rate into a categorical variable)
+    CreditScoreAverage (a function of CreditScoreRangeLower and CreditScoreRangeUpper).
+
+###Interesting Distributions
+
+The StatedMonthlyIncome distribution was right-skewed with a median of $4667. There seemed to be multiple outliers, especially since the max monthly income was $1,750,003. Credit score average and borrower rate were normally distributed with a median of 689.5 and 0.184 respectively.
+
+#Bivariate Plots
+
+The first thing I'll do is get a quick high-level overview of which interesting numeric values are correlated.
+
+```{r}
+library(magrittr)
+library(ggcorrplot)
+
+cor_matric <- cor(loanData[ , c('StatedMonthlyIncome', 
+                  'CreditScoreAverage', 
+                  'ProsperScore',
+                  'BorrowerRate',
+                  'EstimatedReturn',
+                  'OpenCreditLines',
+                  'TotalCreditLinespast7years',
+                  'InquiriesLast6Months',
+                  'CurrentDelinquencies',
+                  'LoanOriginalAmount',
+                  'DebtToIncomeRatio')], 
+    use="complete.obs")
+
+ggcorrplot(cor_matric, 
+           hc.order = TRUE, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="circle", 
+           title="Correlogram of loanData quant variables", 
+           ggtheme=theme_bw)
+```
+
+Using the above functions, we are able to determine 4 quantitative variables that have strong correlations with each other (positively or negatively):
+
+    BorrowerRate and EstimatedReturn (0.83)
+    ProsperScore and BorrowerRate (-0.66)
+    OpenCreditLines and TotalCreditLinespast7years (0.57) 
+    CreditScoreAverage and BorrowerRate (-0.53)
+    
+```{r}
+# StateMonthly Income greater than 10 and apply log scale on StatedMonthlyIncome
+ggplot(aes(x=CreditScoreAverage,y=StatedMonthlyIncome), 
+       data=subset(loanData,
+                     CreditScoreAverage>300 &
+                     StatedMonthlyIncome>10)) +
+  xlab('Credit Score Average') +
+  ylab('Stated Monthly Income') +
+  geom_jitter(alpha=.025,size=2) +
+  scale_y_log10() +
+  ggtitle("CreditScore vs. log(Monthly Income)")
+
+# Create subset where StatedMonthlyIncome greater than 10
+filter_monthlyIncome <- subset(loanData,StatedMonthlyIncome >10)
+
+# Linear Model between CreditScoreAverage and StatedMonthlyIncome
+f <- lm(log(filter_monthlyIncome$StatedMonthlyIncome) 
+        ~ filter_monthlyIncome$CreditScoreAverage)
+summary(f)
+
+cor.test(
+  log(filter_monthlyIncome$StatedMonthlyIncome), 
+  filter_monthlyIncome$CreditScoreAverage)
+```
+
+After transforming the data, the graph is more linearlized and shows a bit more correlation. 
+  
+```{r}
+# jitter plot between StatedMonthlyIncome and LoanOriginalAmount
+# apply log scale on x axis and filter StatedMonthlyIncome greater than 10
+ggplot(aes(x=StatedMonthlyIncome,y=LoanOriginalAmount), 
+       data=subset(loanData,StatedMonthlyIncome>10)) +
+  scale_x_log10() +
+  geom_jitter(alpha=.01, size=2) +
+  xlab('Stated Monthly Income') +
+  ylab('Loan Original Amount') +
+  ggtitle("Log of Stated Monthly Income vs. Loan Amount")
+
+
+# Linear Model between StatedMonthlyIncome and LoanOriginalAmount
+f <- lm(LoanOriginalAmount ~ StatedMonthlyIncome, 
+        data=subset(loanData,StatedMonthlyIncome>10))
+summary(f)
+
+# Correlation test between LoanOriginalAmount and log of StatedMonthlyIncome 
+tmp <- subset(loanData,StatedMonthlyIncome>10)
+cor.test(tmp$LoanOriginalAmount, 
+         log(tmp$StatedMonthlyIncome))
+```
+
+The log of monthly income and loan amount show a linear relationship. Their seems to be horizontal lines at or near intervals of $5,000 up to approximately $25,000. This may show when loan amounts are rounded, as this makes sense as most people tend to think in terms of round numbers (this isn't how much the borrower is approved for, just how much they asked for).
+
+```{r}
+#Plot a scatter plot beween Stated Monthly Income (filtered for income less than $25,000) and Borrwer Rates
+p1 <- ggplot(subset(loanData, StatedMonthlyIncome < 25000),
+       aes(x= StatedMonthlyIncome,
+           y=BorrowerRate)) + 
+  xlab('Stated Monthly Income') +
+  ylab('Borrower Rate') +
+  geom_jitter(alpha=0.025) 
+
+#Plot a scatter plot between Average Credit Score (greater than 300) and Borrower Rates
+p2 <- ggplot(aes(x= CreditScoreAverage,
+           y=BorrowerRate),
+           data = subset(loanData, CreditScoreAverage>300)) + 
+  xlab('Credit Score Average') +
+  ylab('Borrower Rate') +
+  geom_jitter(alpha=0.025) + 
+  coord_cartesian(xlim = c(450, 900))
+
+#Plot a scatter plot between Prosper Score and Borrower Rate
+p3 <- ggplot(aes(x=ProsperScore, y = BorrowerRate),
+             data = subset(loanData, 
+                           !is.na(ProsperScore))) +
+  xlab('Prosper Score') +
+  ylab('Borrower Rate') +
+  geom_jitter(alpha=0.025) 
+
+#Plot a scatter plot between Borrower Rate and Estimated Return
+p4 <- ggplot(aes(BorrowerRate, EstimatedReturn), 
+             data = loanData) + 
+  geom_jitter(alpha=0.025) 
+
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+
+#Correlation test between Stated Monthly Income and Borrower Rate
+tmp <- subset(loanData,StatedMonthlyIncome < 25000)
+cor.test(tmp$BorrowerRate,
+         tmp$StatedMonthlyIncome, 
+         type='pearson')
+
+#Correlation test between Average Credit Score and Borrower Rate
+tmp1 <- subset(loanData,CreditScoreAverage>300)
+cor.test(tmp$BorrowerRate,
+         tmp$CreditScoreAverage, 
+         type='pearson')
+
+#Correlation test between Prosper Score and Borrower Rate
+tmp2 <- subset(loanData,!is.na(ProsperScore))
+cor.test(tmp$BorrowerRate,
+         tmp$ProsperScore, 
+         type='pearson')
+
+#Correlation test between Borrower Rate and Estimated Return
+tmp3 <- subset(loanData, EstimatedReturn > 0)
+cor.test(tmp$BorrowerRate,
+         tmp$EstimatedReturn, 
+         type='pearson')
+```
+
+Above you see four graphs. 
+Plot 1: Looks at Stated Monthly Income compared to Borrower Rate. There seems to be some negative correlation of -0.19. 
+Plot 2: Looks at Average Credit Score compared to Borrower Rate. There is a negative correlation of -0.46 (as credit score increases, there is a correlation that borrower rate decreases).
+Plot 3: Looks at Prosper Score (NA values are ignored) compared to Borrower Rate. There is a strong negative correlation of -0.65 (as Prosper score increases, borrower rates decrease).
+Plot 4: Looks at Estimated Return and how much does Borrower rate affect it. There is a strong positive correlation of .82. Estimated return could be a function for borrower rate. This needs more scrutiny.
+
+
+```{r}
+ggplot(loanData,
+       aes(x= LoanStatusGeneral,
+           y=CreditScoreAverage)) + 
+  geom_boxplot() +
+  xlab('Loan Status General') +
+  ylab('Credit Score Average') + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+Here, median credit scores seem to illustrate that lower credit scores have a higher chance of defaulting or being charged off. 
+
+```{r}
+# jitter plot Prosper Score and Credit Score Average
+# filter Credit Score Average Without na values and greater than 300
+ggplot(aes(x=ProsperScore,y=CreditScoreAverage), 
+       data=subset(loanData,!is.na(CreditScoreAverage) &
+                     CreditScoreAverage > 300 &
+                     !is.na(ProsperScore))) +
+  geom_jitter(alpha=.025, size=3) +
+  xlab('Prosper Score') +
+  ylab('Credit Score Average') +
+  ggtitle("Prosper Score vs. Credit Score Average")
+```
+
+It seems that after a prosper score of 10, credit score decreases. People with a good credit score, tend to have a prosper score of 10. 
+
+#Bivariate Analysis
+
+###Relationships Found With Main Features of Interest
+
+The log of monthly income and loan amount show a linear relationship. Their seems to be horizontal lines at or near intervals of $5,000 up to approximately $25,000. Their is a correlation found using the log of monthly income at 0.42. From this data, we can gather that for those who have a monthly income of less than $8000, their loan amounts tend not to be greater than $25,000. 
+
+Visually, there seemed to be little or no correlation between stated monthly income and borrower rate. By running a correlation test, there seems to be a slight correlation of -0.19. 
+
+Average Credit Score, Prosper Score, and Estimated Return had correlation scores of the following: -0.46, -0.65, and 0.82. Judging from the higher negative correlations we can associate that borrower rate decreases as average credit score and prosper score increase. On the other hand, estimated return has a strong positive correlation with borrower rate, meaning as borrower rate increases, estimated return increases. 
+
+###Other Interesting Relationships
+
+Lower credit scores seems to relate to having a higher chance of defaulting or charging off. 
+
+Up until approximately a prosper score of 10 their seems to be a possible relationship between prosper score and credit score. 
+
+
+###Strongest Relationships Found
+
+The strongest relationship I found was between BorrowerRate and EstimatedReturn. Also there was one between ProsperScore and BorrowerRate.
+
+#Multivariate Plots
+
+```{r}
+library(ggalt)
+
+ggplot(loanData, aes(x=StatedMonthlyIncome, 
+                     y=LoanOriginalAmount, 
+                     color=LoanStatusGeneral)) + 
+  geom_jitter(alpha = .05, size = 2.5) + 
+  xlab('Stated Monthly Income') +
+  ylab('Loan Original Amount') + 
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = 'Loan Status',
+                                          override.aes = list(alpha = 1, 
+                                                              size = 2)),
+                     direction = -1) +
+  coord_cartesian(xlim = c(0, 30000), 
+                  ylim = c(0, max(loanData$LoanOriginalAmount))) + 
+  theme_dark()
+```
+
+There seem to be many completed loans where the original loan amount is fairly low. As the original loan amount increases and stated monthly income is lower than $10,000 you can see that Defaulted and Charged off loans are occuring more frequently. 
+
+```{r}
+ggplot(subset(loanData, EmploymentStatus != ''), 
+       aes(x=StatedMonthlyIncome,
+           y=LoanOriginalAmount,
+           color=EmploymentStatus)) + 
+  xlab('Stated Monthly Income') +
+  ylab('Loan Original Amount') +
+  geom_jitter(alpha = 0.05) + 
+  scale_color_brewer(type = 'div',
+                     palette = 4,
+                     guide = guide_legend(title = 'Employment Status',
+                                          override.aes = list(alpha = 1, 
+                                                              size = 2)),
+                     direction = -1) +
+  #geom_smooth() +
+  coord_cartesian(xlim = c(0,30000), 
+                  ylim = c(0,max(loanData$LoanOriginalAmount)))
+```
+
+Here, we color the data for Employment Status. For the most part, the data is what is expected: Retired, not employed, not available have less than $3000, with most near $0. 
+
+```{r}
+p1 <- ggplot(subset(loanData, EmploymentStatus %in% c('Employed',
+                                                'Full-time', 
+                                                'Part-time', 
+                                                'Self-employed')), 
+       aes(x=StatedMonthlyIncome,
+           y=LoanOriginalAmount,
+           color=EmploymentStatus)) + 
+  xlab('Stated Monthly Income') +
+  ylab('Loan Original Amount') +
+  geom_jitter(alpha = 0.05) + 
+  scale_color_brewer(type = 'qual',
+                     #palette = 1,
+                     guide = guide_legend(title = 'Employment Status',
+                                          override.aes = list(alpha = 1, 
+                                                              size = 2)),
+                     direction = -1) +
+  #geom_smooth() +
+  coord_cartesian(xlim = c(0,30000), 
+                  ylim = c(0,max(loanData$LoanOriginalAmount))) + 
+  theme_dark()
+
+p2 <- ggplot(subset(loanData, EmploymentStatus %in% c('Full-time', 
+                                                'Part-time', 
+                                                'Self-employed')), 
+       aes(x=StatedMonthlyIncome,
+           y=LoanOriginalAmount,
+           color=EmploymentStatus)) + 
+  xlab('Stated Monthly Income') +
+  ylab('Loan Original Amount') +
+  geom_jitter(alpha = 0.1) + 
+  scale_color_brewer(type = 'qual',
+                     #palette = 1,
+                     guide = guide_legend(title = 'Employment Status',
+                                          override.aes = list(alpha = 1, 
+                                                              size = 2)),
+                     direction = -1) +
+  #geom_smooth() +
+  coord_cartesian(xlim = c(0,30000), 
+                  ylim = c(0,max(loanData$LoanOriginalAmount))) + 
+  theme_dark()
+
+grid.arrange(p1, p2, ncol = 1)
+```
+
+I've gone ahead and plotted out two versions of the map, one with the added employment status of employed and the other without. With the added employment status of employed, with a stated monthly income of approximately $12000 or less, the loan original amount seems to be below $20000. There are added noticable horizontal lines for both graphs, most likely because of rounding. 
+
+Without the employed employment status, the picture is a bit clearer. Most part time incomes under $2000 seem to ask for less than $10000 on their loans. Self-Employed incomes on the other hand seem to ask in intervals of approximately $4000, $10000, and $15000. 
+
+```{r}
+#Created a function using the substring of listing creation date. 
+loanData$ListYear <- substring(loanData$ListingCreationDate,1,4) 
+
+ggplot(subset(loanData, EmploymentStatus != ''), 
+       aes(x=EmploymentStatus,
+           y=LoanStatusGeneral)) + 
+  xlab('Employment Status') +
+  ylab('Loan Status General') +
+  geom_jitter(alpha = 0.1) + 
+  facet_wrap(~ListYear) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+These plots allow us to see how Prosper has collected data from 2006 to 2014. It seems employment status data wasn't kept in 2006. In 2007, we don't see the 'Employed' or 'Other' status data points. 
+In 2009, there's very few loans. Then in 2011, we see that the plots begin to increase desnity again. 
+
+```{r}
+ggplot(loanData,
+       aes(x= CreditScoreAverage,
+           y=BorrowerRate)) + 
+  xlab('Credit Score Average') +
+  ylab('Borrower Rate') +
+  geom_jitter(alpha=0.1, aes(color = LoanOriginalAmount)) + 
+  scale_colour_gradientn(colours=rainbow(4)) +
+  geom_smooth() + 
+  coord_cartesian(xlim=c(500,850)) + 
+  facet_wrap(~ListYear)
+```
+
+Over time, we see an increase in the minimum credit score average. It seems that most loans in 2006 were under $10000. This seems to continue until around 2010, when you begin see higher loan amounts around $20000. It isn't until 2013, we start seeing loan amounts reaching $30,000.
+
+```{r}
+loanData$IncomeRange <- ordered(loanData$IncomeRange, 
+                                levels=c("Not displayed", 
+                                         "Not employed", 
+                                         "$0", "$1-24,999",  
+                                         "$25,000-49,999", 
+                                         "$50,000-74,999", 
+                                         "$75,000-99,999", 
+                                         "$100,000+"))
+
+ggplot(subset(loanData, IncomeRange != "Not displayed"),
+       aes(x=ListYear,
+           y=LP_InterestandFees/1000000,
+           fill = IncomeRange)) + 
+  xlab('Listing Year') +
+  ylab('LP Interest and Fees/1,000,000') + 
+  scale_fill_brewer('div',
+                    palette = 2,
+                    guide = guide_legend(title = 'Income Range')) +
+  stat_summary(fun.y = sum,
+               geom = "bar",
+               position = 'stack')
+```
+
+After 2010, the number of higher income individuals that Prosper has made money from increased. 
+
+```{r}
+library(memisc)
+
+m1 <- lm(BorrowerRate ~ ProsperScore, data = loanData)
+m2 <- update(m1, ~ . + CreditScoreAverage)
+m3 <- update(m2, ~ . + ListYear)
+
+mtable(m1, m2, m3, sdigits = 3)
+
+```
+
+The model above helps to explain the variance in borrower rate. It seems that the variables: Prosper score, credit score average, and listing year are the variables, which seem to make up the model. Other variables were tested, but didn't seem to have a significant effect. 
+
+#Multivariate Analysis
+
+
+###New Discoveries in the Data
+
+
+We saw a positive relationship between loan amount and year of the loan. Other than this, we didn't discover any new relationships, but did learn about the nuances of previously discovered relationships. For example:
+
+    Many 'Completed' loans where LoanOriginalAmount is lower.
+    Defaulted and ChargedOff loans seem to occur when the StatedMonthlyIncome is low and the LoanOriginalAmount is high.
+    Most part time incomes under $2000 seem to ask for less than $10000 on their loans.
+    Self-employed people seemed to mainly ask for $4000, $10,000 or $15,000.
+    Employment status data wasn't kept in 2006. In 2007, we don't see the 'Employed' or 'Other' status data points. 
+    In 2009, there's very few loans. Then in 2011, we see that the plots begin to increase desnity again. 
+    We see very few loans in 2009, after the 2008 financial crisis. 2010 picks back up at a bit. In 2011 the graph is dense again, with many self-employed loans.
+    Over time, we see an increase of the credit score average. It seems that most loans in 2006 were under $10000. This seems to continue until around 2010, when you begin see higher loan amounts around $20000. It isn't until     2013, we start seeing loan amounts reaching $30,000.
+    After 2010 Prosper made more money from higher income individuals.
+
+###Linear Models
+
+
+A model was made to explain the borrower rate variance. Prosper Score, Credit Score and Listing Year were used and explained 68% of the variance. Other variables were used, but they either had no effect or a negative effect. 
+
+#Final Plots & Summary
+
+
+###Plot One
+
+```{r}
+cor_matric <- cor(loanData[ , c('StatedMonthlyIncome', 
+                  'CreditScoreAverage', 
+                  'ProsperScore',
+                  'BorrowerRate',
+                  'EstimatedReturn',
+                  'OpenCreditLines',
+                  'TotalCreditLinespast7years',
+                  'InquiriesLast6Months',
+                  'CurrentDelinquencies',
+                  'LoanOriginalAmount',
+                  'DebtToIncomeRatio'
+                  )], 
+    use="complete.obs")
+
+ggcorrplot(cor_matric, 
+           hc.order = TRUE, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="circle", 
+           title="Correlogram of quantitative loanData variables", 
+           legend.title = "Correlation",
+           ggtheme=theme_bw)
+```
+
+This plot gives a bird's eye view of the correlation between multiple quantitative variables. 
+Here, we see that these varibles are strongly correlated:
+
+    BorrowerRate and EstimatedReturn (0.83)
+    ProsperScore and BorrowerRate (-0.66)
+    OpenCreditLines and TotalCreditLinespast7years (0.57) 
+    CreditScoreAverage and BorrowerRate (-0.53)
+    
+###Plot Two
+
+```{r}
+p1 <- ggplot(subset(loanData, EmploymentStatus %in% c('Employed',
+                                                'Full-time', 
+                                                'Part-time', 
+                                                'Self-employed')), 
+       aes(x=StatedMonthlyIncome,
+           y=LoanOriginalAmount,
+           color=EmploymentStatus)) + 
+  xlab('Stated Monthly Income') +
+  ylab('Loan Original Amount') +
+  geom_jitter(alpha = 0.05) + 
+  scale_color_brewer(type = 'qual',
+                     #palette = 1,
+                     guide = guide_legend(title = 'Employment Status',
+                                          override.aes = list(alpha = 1, 
+                                                              size = 2)),
+                     direction = -1) +
+  #geom_smooth() +
+  coord_cartesian(xlim = c(0,30000), 
+                  ylim = c(0,max(loanData$LoanOriginalAmount))) + 
+  theme_dark()
+
+p2 <- ggplot(subset(loanData, EmploymentStatus %in% c('Full-time', 
+                                                'Part-time', 
+                                                'Self-employed')), 
+       aes(x=StatedMonthlyIncome,
+           y=LoanOriginalAmount,
+           color=EmploymentStatus)) + 
+  xlab('Stated Monthly Income') +
+  ylab('Loan Original Amount') +
+  geom_jitter(alpha = 0.1) + 
+  scale_color_brewer(type = 'qual',
+                     #palette = 1,
+                     guide = guide_legend(title = 'Employment Status',
+                                          override.aes = list(alpha = 1, 
+                                                              size = 2)),
+                     direction = -1) +
+  #geom_smooth() +
+  coord_cartesian(xlim = c(0,30000), 
+                  ylim = c(0,max(loanData$LoanOriginalAmount))) + 
+  theme_dark()
+
+grid.arrange(p1, p2, ncol = 1)
+```
+
+I've gone ahead and plotted out two versions of the map, one with the added employment status of employed and the other without. With the added employment status of employed, with a stated monthly income of approximately $12000 or less, the loan original amount seems to be below $20000. There are added noticable horizontal lines for both graphs, most likely because of rounding. 
+
+Without the employed employment status, the picture is a bit clearer. Most part time incomes under $2000 seem to ask for less than $10000 on their loans. Self-Employed incomes on the other hand seem to ask in intervals of approximately $4000, $10000, and $15000. 
+
+
+###Plot Three
+
+```{r}
+ggplot(subset(loanData, ListYear > 2005),
+       aes(x= CreditScoreAverage,
+           y=BorrowerRate/10)) + 
+  geom_jitter(alpha=0.1, aes(color = LoanOriginalAmount)) + 
+  scale_colour_gradientn(colours=rainbow(4),
+                         name = 'Loan Amount ($)') +
+  geom_smooth() + 
+  coord_cartesian(xlim=c(500,850)) + 
+  facet_wrap(~ListYear) + 
+  ggtitle("Borrower Rate by Credit Score, 
+          showing loan amount, faceted by year") + 
+  labs(x="Average Credit Score", y= "Borrower Interest Rate") + 
+  scale_y_continuous(labels = scales::percent) + 
+  guides(fill=guide_legend(title="Loan Amount"))
+```
+
+Over time, we see an increase in the minimum credit score average. It seems that most loans in 2006 were under $10000. This seems to continue until around 2010, when you begin see higher loan amounts around $20000. It isn't until 2013, we start seeing loan amounts reaching $30,000.
+
+#Reflection
+
+I began this exploration with the Prosper Data set to better determine what variables seem to have the most leverage on lowering interest rate, while achieving a higher loan amount. Since the dataset didn't have a loan amount approved variable, the efforts were focused towards borrower rate instead. It seems that credit score plays the biggest factor in achieving a lower interest rate. Interest rates seem to rise and fall through the years, and is hard to predict through this dataset alone.
+
+The univariate analysis allowed me to determine what variables would be most suitable for my analysis. Afterwards, the bivariate analysis allows me to see correlations between the data variable pairs, allowing to better determine relationships (if any). Some interesting relationships to note: Higher prosper scores tend to lead to lower borrower rate. Reasonably, high credit scores tend to lead to lower borrower rate's as well. 
+
+It's hard determine what data variables really lead towards the right direction, and part of it determines on how we as the analyst tend to interpret the data and the variables as well. Often, I went back and forth between what variables make sense to illustrate versus which ones aren't needed. 
+
+If there was more time spent on the dataset, I'd like to see if country location increases or decreases borrower rate and if number of dependents increases or decreases the percentage of completing loans. I'd also like look more deeply into credit lines, inquiries, and debt-to-income ratios overall. 
